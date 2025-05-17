@@ -1,6 +1,4 @@
 # Linux System Administration Scripts
-Linux SysAdmin Bash Scripts Library
-
 
 Automate routine tasks: This project provides a collection of Bash scripts to automate common Linux system administration duties. Automating daily sysadmin tasks improves efficiency and consistency by reducing manual repetition and the risk of human error. Each script is designed to be distribution-agnostic, using only standard base utilities (e.g. rsync, tar, awk, grep, netstat/ss, systemctl) available on most Linux systems. All scripts are released under the GNU GPL v3.0 license and include usage information in their headers.
 
