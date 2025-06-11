@@ -16,3 +16,4 @@ Automate routine tasks: This project provides a collection of Bash scripts to au
 - `sys_monitor.sh` – System Monitoring: Display system uptime, resource utilization (CPU, memory, disk), and top processes.
 - `update_system.sh` – System Updates: Apply available package updates and patches (works with apt, yum/dnf, zypper, pacman).
 - `user_manage.sh`  – User and Group Management: Create or remove user accounts and groups, modify user group memberships, and lock/unlock accounts.
+- `zimbra_backup.sh`  - Create a backup for a zimbra mailbox.
