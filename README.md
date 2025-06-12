@@ -18,3 +18,4 @@ Automate routine tasks: This project provides a collection of Bash scripts to au
 - `user_manage.sh`  – User and Group Management: Create or remove user accounts and groups, modify user group memberships, and lock/unlock accounts.
 - `zimbra_backup.sh`  - Create a backup for a zimbra mailbox.
 - `zimbra_restore.sh`  - Restore a backup for a zimbra mailbox.
+- `rsync_magic.sh`  -  A smart Bash script that wraps rsync for safe, flexible, and efficient file synchronization and backups.
