@@ -19,3 +19,6 @@ Automate routine tasks: This project provides a collection of Bash scripts to au
 - `zimbra_backup.sh`  - Create a backup for a zimbra mailbox.
 - `zimbra_restore.sh`  - Restore a backup for a zimbra mailbox.
 - `rsync_magic.sh`  -  A smart Bash script that wraps rsync for safe, flexible, and efficient file synchronization and backups.
+
+<!--START_SECTION:badges-->
+<!--END_SECTION:badges-->
