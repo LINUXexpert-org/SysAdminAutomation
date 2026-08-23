@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License along 
 # with this program. If not, see <https://www.gnu.org/licenses/>.
 
+set -euo pipefail
+
 # Ensure script is run as root or sudo
 if [ "$EUID" -ne 0 ]; then
     echo "❌ This script must be run as root or with sudo."
@@ -63,14 +65,31 @@ echo "📦 Starting backup..."
 # a zmmailbox failure), but it means the file lands root-owned inside a
 # directory chowned to zimbra, so ownership is handed over below.
 # shellcheck disable=SC2024
-sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" getRestURL "//?fmt=tgz"' _ "$EMAIL" > "$BACKUP_FILE"
-
-# Verify success
-if [ $? -eq 0 ]; then
+# Tested inline rather than via `$?` on the next line: under set -e a
+# failure would exit before any check ran, making the error branch below
+# dead code.
+if sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" getRestURL "//?fmt=tgz"' _ "$EMAIL" > "$BACKUP_FILE"; then
+    # A zero exit is not sufficient: getRestURL can write an HTTP error
+    # body and still succeed, which previously produced a cheerful "✅"
+    # over a file containing an error page. Require a plausible size and
+    # a readable gzip container.
+    size="$(stat -c %s -- "$BACKUP_FILE" 2>/dev/null || echo 0)"
+    if [ "$size" -lt 1024 ]; then
+        echo "❌ Backup is only ${size} bytes -- almost certainly an error response, not a mailbox."
+        echo "   Leaving it at ${BACKUP_FILE}.suspect for inspection."
+        mv -- "$BACKUP_FILE" "${BACKUP_FILE}.suspect"
+        exit 1
+    fi
+    if ! gzip -t -- "$BACKUP_FILE" 2>/dev/null; then
+        echo "❌ Backup is not a valid gzip stream -- treating as failed."
+        echo "   Leaving it at ${BACKUP_FILE}.suspect for inspection."
+        mv -- "$BACKUP_FILE" "${BACKUP_FILE}.suspect"
+        exit 1
+    fi
     chown zimbra:zimbra "$BACKUP_FILE" 2>/dev/null || true
-    echo "✅ Backup completed: $BACKUP_FILE"
+    echo "✅ Backup completed: $BACKUP_FILE ($(numfmt --to=iec "$size" 2>/dev/null || echo "$size bytes"))"
 else
     echo "❌ Backup failed. Check if the user exists or zmmailbox is working."
-    rm -f "$BACKUP_FILE"
+    rm -f -- "$BACKUP_FILE"
     exit 1
 fi

@@ -17,7 +17,12 @@
 # 
 # Usage: update_system.sh    (no arguments, run as root)
 # Description: Detects the Linux distro's package manager and installs all updates.
- 
+#
+# Unattended: every branch below passes -y or --noconfirm, so this will
+# apply whatever the configured repositories offer without asking.
+
+set -euo pipefail
+
 # Ensure running as root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root to apply system updates."
@@ -41,6 +46,11 @@ elif command -v zypper &> /dev/null; then
   zypper refresh && zypper update -y
 elif command -v pacman &> /dev/null; then
   echo "Updating with pacman..."
+  # Arch has no supported partial-upgrade path: -Syuu on a stale mirror
+  # list or a half-updated system can leave unbootable library mismatches,
+  # and --noconfirm answers away the prompts that would have warned. Kept
+  # for parity with the other package managers, but this is the branch to
+  # be most careful with.
   pacman -Syuu --noconfirm
 else
   echo "Error: No supported package manager found on this system."

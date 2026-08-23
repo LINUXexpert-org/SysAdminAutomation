@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License along 
 # with this program. If not, see <https://www.gnu.org/licenses/>.
 
+set -euo pipefail
+
 # Ensure script is run as root or with sudo
 if [ "$EUID" -ne 0 ]; then
     echo "❌ This script must be run as root or with sudo."
@@ -70,10 +72,17 @@ echo "🔄 Restoring backup..."
 # arrive as positional arguments. Interpolating them (as this line
 # previously did) let shell metacharacters in either value run commands
 # as the zimbra user.
-sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" postRestURL "/?fmt=tgz&resolve=skip" --file "$2"' _ "$EMAIL" "$FULL_PATH"
+# Refuse a backup that is not a readable gzip stream before handing it to
+# zmmailbox -- a truncated or error-page "backup" should fail here, with
+# a clear reason, rather than part way through a restore.
+if ! gzip -t -- "$FULL_PATH" 2>/dev/null; then
+    echo "❌ $FILENAME is not a valid gzip archive -- refusing to restore from it."
+    exit 1
+fi
 
-# Check result
-if [ $? -eq 0 ]; then
+# Tested inline rather than via `$?`: under set -e a failure would exit
+# before the check, making the error branch below unreachable.
+if sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" postRestURL "/?fmt=tgz&resolve=skip" --file "$2"' _ "$EMAIL" "$FULL_PATH"; then
     echo "✅ Restore completed successfully for $EMAIL"
 else
     echo "❌ Restore failed. Please verify mailbox exists and backup file integrity."
