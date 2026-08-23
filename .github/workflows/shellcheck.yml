@@ -23,11 +23,12 @@ jobs:
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
-          # Findings are reported but do not fail the build yet: the
-          # existing scripts have not been through a lint pass, so
-          # failing on day one would block every PR on pre-existing
-          # issues. Tighten to "error" -> "warning" -> remove once the
-          # backlog is cleared; see the audit in the README.
+          # warning, not error: the first run at this level surfaced
+          # exactly two findings and both were fixed, so there is no
+          # pre-existing backlog to grandfather in. Anything new that
+          # trips it is genuinely new. Dropping to the default (info)
+          # would also pull in style suggestions across every script --
+          # worth doing, but as its own pass.
           severity: warning
           check_together: 'yes'
           format: gcc

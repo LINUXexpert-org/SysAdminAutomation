@@ -208,8 +208,6 @@ clean_package_caches() {
 
 # Clean temporary files
 clean_temporary_files() {
-  local total_freed=0
-  
   for dir in "${DIRS_TO_CLEAN[@]}"; do
     if [ ! -d "$dir" ]; then
       log "Warning: Directory $dir does not exist, skipping..."

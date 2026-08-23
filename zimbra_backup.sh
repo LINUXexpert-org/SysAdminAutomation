@@ -57,10 +57,17 @@ echo "📦 Starting backup..."
 # $EMAIL arrives as a positional argument instead. Interpolating it (as
 # this line previously did) let any shell metacharacter in the address
 # run commands as the zimbra user, which owns the whole mail store.
+# The redirect is performed by this shell, which is root -- not by the
+# sudo'd zimbra process. That is intentional (root can always write
+# here, and a pipe into `tee` would put tee's exit status in $? and mask
+# a zmmailbox failure), but it means the file lands root-owned inside a
+# directory chowned to zimbra, so ownership is handed over below.
+# shellcheck disable=SC2024
 sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" getRestURL "//?fmt=tgz"' _ "$EMAIL" > "$BACKUP_FILE"
 
 # Verify success
 if [ $? -eq 0 ]; then
+    chown zimbra:zimbra "$BACKUP_FILE" 2>/dev/null || true
     echo "✅ Backup completed: $BACKUP_FILE"
 else
     echo "❌ Backup failed. Check if the user exists or zmmailbox is working."
