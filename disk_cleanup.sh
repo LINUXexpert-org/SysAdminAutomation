@@ -32,7 +32,11 @@
 #   disk_cleanup.sh --clean --age 14 --dry-run   # Preview cleanup with 14-day threshold
 #
 
-set -o pipefail
+# Full strict mode. The two pipelines below that legitimately return
+# non-zero -- find hitting unreadable directories, and head closing a
+# pipe early -- are handled at their call sites rather than by leaving
+# the whole script lax.
+set -euo pipefail
 
 # ===== CONFIGURATION =====
 AGE_THRESHOLD=7
@@ -158,8 +162,12 @@ show_disk_usage() {
   df -h -x tmpfs -x devtmpfs || error_exit "Failed to get disk usage information"
   
   echo -e "\n==== Top 10 Largest Files ===="
-  find / -type f -printf '%s %p\n' 2>/dev/null | sort -nr | head -n 10 | \
-    awk '{size=$1/1024/1024; printf("%.1f MB - ", size); $1=""; print $0}' || \
+  # -xdev: without it this walks /proc, /sys and every network mount,
+  # which is slow and reports files that are not really taking up disk.
+  # The `|| true` absorbs both find's non-zero on unreadable directories
+  # and the SIGPIPE head causes once it has its ten lines.
+  { find / -xdev -type f -printf '%s %p\n' 2>/dev/null | sort -nr | head -n 10 | \
+    awk '{size=$1/1024/1024; printf("%.1f MB - ", size); $1=""; print $0}'; } || \
     echo "Warning: Could not retrieve largest files"
 }
 
@@ -218,7 +226,9 @@ clean_temporary_files() {
     
     # Count files that would be deleted
     local file_count
-    file_count=$(find "$dir" -type f -mtime +"$AGE_THRESHOLD" 2>/dev/null | wc -l)
+    # `|| true` on the pipeline: find exits non-zero for unreadable
+    # subdirectories, which under pipefail would abort the whole cleanup.
+    file_count=$(find "$dir" -type f -mtime +"$AGE_THRESHOLD" 2>/dev/null | wc -l || true)
     
     if [ "$file_count" -gt 0 ]; then
       if [ "$DRY_RUN" = true ]; then

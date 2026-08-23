@@ -18,9 +18,31 @@
 # Usage: service_manager.sh <action> <service_name>
 #   Actions: start, stop, restart, status, enable, disable, list
 # Description: Uses systemctl or service to control services.
- 
-action="$1"
-service="$2"
+#
+# status and list are read-only; everything else changes system state
+# and needs root.
+
+set -euo pipefail
+
+action="${1:-}"
+service="${2:-}"
+
+# Validate up front so an unknown action cannot reach systemctl as a
+# bare word, and so the privilege check below has something to gate on.
+case "$action" in
+  start|stop|restart|status|enable|disable|list) ;;
+  "") echo "Usage: $0 {start|stop|restart|status|enable|disable|list} <service_name>" >&2; exit 1 ;;
+  *)  echo "Invalid action '$action'. Use start, stop, restart, status, enable, disable, or list." >&2; exit 1 ;;
+esac
+
+case "$action" in
+  start|stop|restart|enable|disable)
+    if [ "$EUID" -ne 0 ]; then
+      echo "'$action' changes system state and requires root. Re-run with sudo." >&2
+      exit 1
+    fi
+    ;;
+esac
 
 if [ "$action" = "list" ]; then
   # List running services
@@ -41,21 +63,16 @@ fi
 
 if command -v systemctl &> /dev/null; then
   case "$action" in
-    start|stop|restart|status)
-      systemctl $action "$service"
-      ;;
-    enable|disable)
-      systemctl $action "$service"
-      ;;
-    *)
-      echo "Invalid action. Use start, stop, restart, status, enable, disable, or list."
-      exit 1
+    start|stop|restart|status|enable|disable)
+      # Quoted: $action is validated above, but leaving it bare invites
+      # word-splitting the moment anyone passes it through a variable.
+      systemctl "$action" "$service"
       ;;
   esac
 elif command -v service &> /dev/null; then
   case "$action" in
     start|stop|restart)
-      service "$service" $action
+      service "$service" "$action"
       ;;
     status)
       service "$service" status

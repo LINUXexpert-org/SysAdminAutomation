@@ -17,17 +17,39 @@
 # 
 # Usage: log_inspect.sh [search <pattern> | tail <logfile>]
 # Description: Searches across /var/log for a pattern, or tails a specific log file.
- 
-if [ "$1" = "search" ]; then
-  pattern="$2"
+#
+# Most of /var/log is root-only. Run this with sudo, or results will be
+# quietly partial -- see the note on the search branch.
+
+set -euo pipefail
+
+if [ "${1:-}" = "search" ]; then
+  pattern="${2:-}"
   if [ -z "$pattern" ]; then
     echo "Usage: $0 search <pattern>"; exit 1
   fi
   echo "Searching for '$pattern' in /var/log..."
-  grep -R -i --color=auto "$pattern" /var/log 2>/dev/null
+  # 2>/dev/null hid permission errors, so an unprivileged run looked like
+  # "no matches" rather than "could not read most of /var/log". Say so
+  # explicitly instead. grep exits 1 on no match, which is not an error.
+  # grep distinguishes three outcomes and they mean different things
+  # here: 0 matched, 1 matched nothing, 2 could not read everything. The
+  # original discarded stderr and ignored the status, so an unprivileged
+  # run over root-owned logs was indistinguishable from a clean search.
+  status=0
+  grep -R -i --color=auto -- "$pattern" /var/log 2>/dev/null || status=$?
+  case "$status" in
+    0) ;;
+    1) echo "No matches found." ;;
+    *)
+      echo "Search was incomplete -- some files under /var/log could not be read." >&2
+      [ "$EUID" -ne 0 ] && echo "Re-run with sudo for a complete search." >&2
+      exit "$status"
+      ;;
+  esac
   exit 0
-elif [ "$1" = "tail" ]; then
-  logfile="$2"
+elif [ "${1:-}" = "tail" ]; then
+  logfile="${2:-}"
   if [ -z "$logfile" ]; then
     echo "Usage: $0 tail <log_file_path>"; exit 1
   fi
