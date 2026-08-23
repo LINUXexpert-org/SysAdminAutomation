@@ -17,9 +17,11 @@
 # 
 # Usage: backup.sh <source_directory> <destination_directory>
 # Description: Creates a tar.gz archive of the source directory in the destination.
- 
-SRC="$1"
-DEST="$2"
+
+set -euo pipefail
+
+SRC="${1:-}"
+DEST="${2:-}"
 if [ -z "$SRC" ] || [ -z "$DEST" ]; then
   echo "Usage: $0 <source_directory> <destination_directory>"
   exit 1
@@ -33,11 +35,29 @@ if [ ! -d "$DEST" ]; then
 fi
 
 base_name="$(basename "$SRC")"
-date_str="$(date +%Y%m%d)"
+# Seconds, not just the date. The old %Y%m%d name meant a second run on
+# the same day silently overwrote the first -- losing a good backup at
+# the exact moment someone was trying to take another one.
+date_str="$(date +%Y%m%d-%H%M%S)"
 archive_name="${base_name}-backup-${date_str}.tar.gz"
-tar -czf "$DEST/$archive_name" -C "$(dirname "$SRC")" "$base_name"
-if [ $? -eq 0 ]; then
-  echo "Backup successful: $DEST/$archive_name"
+archive_path="$DEST/$archive_name"
+
+if [ -e "$archive_path" ]; then
+  echo "Refusing to overwrite existing archive: $archive_path"
+  exit 1
+fi
+
+# Write to a partial name and rename only on success, so an interrupted
+# run cannot leave a truncated file sitting there looking like a backup.
+tmp_path="${archive_path}.partial"
+trap 'rm -f -- "$tmp_path"' EXIT
+
+if tar -czf "$tmp_path" -C "$(dirname "$SRC")" "$base_name"; then
+  mv -- "$tmp_path" "$archive_path"
+  trap - EXIT
+  echo "Backup successful: $archive_path"
+  ls -lh -- "$archive_path"
 else
-  echo "Backup failed for $SRC"
+  echo "Backup failed for $SRC" >&2
+  exit 1
 fi

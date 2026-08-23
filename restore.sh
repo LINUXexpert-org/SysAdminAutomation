@@ -17,9 +17,13 @@
 # 
 # Usage: restore.sh <backup_archive.tar.gz> [target_directory]
 # Description: Extracts the tar.gz archive into the target directory (current dir if not specified).
- 
-ARCHIVE="$1"
-TARGET="$2"
+#
+# Extraction options are deliberately conservative -- see the tar call.
+
+set -euo pipefail
+
+ARCHIVE="${1:-}"
+TARGET="${2:-}"
 if [ -z "$ARCHIVE" ]; then
   echo "Usage: $0 <archive.tar.gz> [target_directory]"
   exit 1
@@ -36,10 +40,31 @@ else
   fi
 fi
 
-tar -xzf "$ARCHIVE" -C "$TARGET"
-status=$?
-if [ $status -eq 0 ]; then
+# An archive is untrusted input: whoever produced it chooses the paths,
+# the ownership and the modes inside it.
+#   --no-same-owner       do not let the archive pick uid/gid. Extracting
+#                         as root previously handed files to whatever
+#                         owner the tarball named.
+#   --no-same-permissions apply the umask rather than restoring setuid
+#                         bits straight out of the archive.
+#   -P is NOT used, so tar strips leading "/" and refuses ".." members.
+echo "Contents to be extracted into $TARGET:"
+tar -tzf "$ARCHIVE" | head -n 20
+total="$(tar -tzf "$ARCHIVE" | grep -c . || true)"
+[ "$total" -gt 20 ] && echo "  ... and $((total - 20)) more entries"
+
+if [ "${ASSUME_YES:-}" != "1" ]; then
+  if [ ! -t 0 ]; then
+    echo "Refusing to extract without confirmation; set ASSUME_YES=1 for unattended use." >&2
+    exit 1
+  fi
+  read -r -p "Extract $total entries into $TARGET, overwriting existing files? (yes/NO): " reply
+  [ "$reply" = "yes" ] || { echo "Cancelled."; exit 0; }
+fi
+
+if tar -xzf "$ARCHIVE" -C "$TARGET" --no-same-owner --no-same-permissions; then
   echo "Restore successful to directory: $TARGET"
 else
-  echo "Restore failed with error code $status"
+  echo "Restore failed" >&2
+  exit 1
 fi
