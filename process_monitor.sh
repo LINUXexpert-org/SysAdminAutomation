@@ -17,6 +17,8 @@
 # 
 # Usage: process_monitor.sh [kill <process_name|PID>]
 # Description: Without args, shows top CPU & memory processes. With "kill", terminates process by name or PID.
+#   The kill path prints what it matched and asks first -- pkill by name
+#   can match more than one process. Set FORCE=1 to skip the prompt.
 
 set -euo pipefail
 

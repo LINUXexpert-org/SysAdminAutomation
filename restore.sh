@@ -17,6 +17,9 @@
 # 
 # Usage: restore.sh <backup_archive.tar.gz> [target_directory]
 # Description: Extracts the tar.gz archive into the target directory (current dir if not specified).
+#   Lists the archive contents and asks before extracting, since it
+#   overwrites whatever is already there. Set ASSUME_YES=1 to skip the
+#   prompt for unattended use.
 #
 # Extraction options are deliberately conservative -- see the tar call.
 

@@ -20,7 +20,9 @@
 #                addtogroup <user> <group>, lock <user>, unlock <user>,
 #                listusers, listgroups
 # Description: Automates user/group creation, deletion, and modifications.
-# Requires root privileges for most operations.
+# Requires root for everything except listusers/listgroups.
+# deluser removes the home directory and asks first; set ASSUME_YES=1 to
+# skip that prompt for unattended use.
 
 set -euo pipefail
 
