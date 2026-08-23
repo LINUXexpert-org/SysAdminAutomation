@@ -21,6 +21,8 @@
 #   --dry-run            Show what would be cleaned without actually removing files
 #   --age DAYS           Set age threshold for temp file cleanup (default: 7)
 #   --dirs DIR1,DIR2     Specify custom directories to clean (default: /tmp,/var/tmp)
+#                        Protected system directories are refused.
+#   --yes                Skip the confirmation prompt for non-default --dirs
 #   --help               Display this help message
 #
 # Examples:
@@ -37,13 +39,18 @@ AGE_THRESHOLD=7
 DIRS_TO_CLEAN=("/tmp" "/var/tmp")
 DRY_RUN=false
 CLEAN_MODE=false
+ASSUME_YES=false
 LOG_FILE="/var/log/disk_cleanup.log"
 
 # ===== UTILITY FUNCTIONS =====
 
 # Print usage information
 usage() {
-  head -n 22 "$0" | tail -n +18
+  # Print the comment block between the "# Usage:" line and the blank
+  # comment that ends it. Previously this sliced fixed line numbers
+  # (head -22 | tail -n +18), which silently truncated the output at
+  # --age as soon as the block grew -- hiding --dirs entirely.
+  sed -n '/^# Usage:/,/^#$/p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # Log messages to file and stdout
@@ -81,6 +88,66 @@ check_root() {
   if [ $EUID -ne 0 ]; then
     error_exit "This action requires root privileges. Please run with sudo." 1
   fi
+}
+
+# Refuse to run -delete against paths that are not plausibly scratch
+# space. --dirs previously accepted anything: `--clean --dirs /home`
+# removed every file in /home older than the age threshold, and
+# `--dirs /` did it system-wide, as root, with no confirmation.
+validate_clean_dirs() {
+  local dir real
+  local protected=(
+    / /bin /boot /dev /etc /home /lib /lib32 /lib64 /opt /proc /root
+    /run /sbin /srv /sys /usr /var
+  )
+
+  for dir in "${DIRS_TO_CLEAN[@]}"; do
+    [ -n "$dir" ] || error_exit "Empty directory in --dirs list." 1
+
+    case "$dir" in
+      /*) ;;
+      *) error_exit "--dirs requires absolute paths; got '$dir'." 1 ;;
+    esac
+
+    # Compare the resolved path, so symlinks and /tmp/../home cannot
+    # smuggle a protected directory past the check.
+    real="$(readlink -f -- "$dir" 2>/dev/null || echo "$dir")"
+    # Normalise to a trailing-slash-free form, except "/" itself, which
+    # must stay "/" -- stripping it yields "" and matches nothing.
+    [ "$real" = "/" ] || real="${real%/}"
+    [ -n "$real" ] || real=/
+
+    for p in "${protected[@]}"; do
+      if [ "$real" = "$p" ]; then
+        error_exit "Refusing to clean '$dir' (resolves to '$real'): protected directory." 1
+      fi
+    done
+  done
+}
+
+# Anything outside the built-in defaults gets an explicit confirmation,
+# because that is where the destructive surprises live.
+confirm_nondefault_dirs() {
+  local dir nondefault=()
+  for dir in "${DIRS_TO_CLEAN[@]}"; do
+    case "$dir" in
+      /tmp|/var/tmp) ;;
+      *) nondefault+=("$dir") ;;
+    esac
+  done
+
+  [ ${#nondefault[@]} -eq 0 ] && return 0
+  [ "$DRY_RUN" = true ] && return 0
+  [ "$ASSUME_YES" = true ] && return 0
+
+  if [ ! -t 0 ]; then
+    error_exit "Non-default --dirs (${nondefault[*]}) need confirmation; pass --yes to run unattended." 1
+  fi
+
+  echo "About to delete files older than $AGE_THRESHOLD days from:"
+  printf '  %s\n' "${nondefault[@]}"
+  read -r -p "Proceed? (yes/NO): " reply
+  [ "$reply" = "yes" ] || error_exit "Cancelled." 0
 }
 
 # ===== DISPLAY FUNCTIONS =====
@@ -193,6 +260,9 @@ parse_arguments() {
       --dry-run)
         DRY_RUN=true
         ;;
+      --yes)
+        ASSUME_YES=true
+        ;;
       --age)
         if [ -z "$2" ] || ! [[ "$2" =~ ^[0-9]+$ ]]; then
           error_exit "Invalid age value. Must be a number." 1
@@ -232,6 +302,8 @@ main() {
   else
     # Cleanup mode
     check_root
+    validate_clean_dirs
+    confirm_nondefault_dirs
     
     if [ "$DRY_RUN" = true ]; then
       log "DRY RUN MODE - No files will be deleted"
