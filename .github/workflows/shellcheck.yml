@@ -1,0 +1,33 @@
+name: ShellCheck
+
+# Every file in this repository is a shell script that people are
+# invited to run as root, so a lint gate is the cheapest guard against
+# the class of bug that keeps showing up here: unquoted expansions,
+# values interpolated into commands, and exit statuses that go unchecked.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          # Findings are reported but do not fail the build yet: the
+          # existing scripts have not been through a lint pass, so
+          # failing on day one would block every PR on pre-existing
+          # issues. Tighten to "error" -> "warning" -> remove once the
+          # backlog is cleared; see the audit in the README.
+          severity: error
+          check_together: 'yes'
+          format: gcc
