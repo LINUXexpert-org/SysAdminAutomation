@@ -17,7 +17,12 @@
 # 
 # Usage: network_info.sh    (no arguments)
 # Description: Displays network interface addresses, routing table, open ports, and iptables rules.
- 
+#
+# Read-only. The iptables section needs root; without it that section
+# reports the failure rather than silently showing nothing.
+
+set -euo pipefail
+
 echo "==== Network Interfaces (IP addresses) ===="
 if command -v ip &> /dev/null; then
   ip -brief addr show    # brief output of interfaces and addresses
@@ -47,7 +52,10 @@ fi
 
 echo -e "\n==== Firewall Rules (iptables) ===="
 if command -v iptables &> /dev/null; then
-  iptables -L -n -v    # list firewall rules with numeric addresses and packet counts
+  # Needs root; report the failure instead of letting set -e abort here.
+  iptables -L -n -v || echo "Could not read iptables rules (run as root?)."
+elif command -v nft &> /dev/null; then
+  nft list ruleset || echo "Could not read nftables ruleset (run as root?)."
 else
   echo "iptables command not found (no firewall rules to show or using nftables)."
 fi

@@ -17,7 +17,15 @@
 # 
 # Usage: sys_monitor.sh    (no arguments)
 # Description: Prints system uptime, memory, disk usage, and top CPU/mem processes.
- 
+
+set -euo pipefail
+
+# `ps | head` is a SIGPIPE waiting to happen: head closes the pipe after
+# six lines, and on a host with enough processes ps fills the buffer and
+# dies with 141, which pipefail turns into a script exit. That is exactly
+# the busy machine you most want this to work on, so those two pipelines
+# tolerate it explicitly.
+
 echo "==== System Uptime and Load ===="
 uptime
 
@@ -30,7 +38,7 @@ df -h -x tmpfs -x devtmpfs
 
 echo -e "\n==== Top 5 Processes by CPU Usage ===="
 # Display header and top 5 CPU-consuming processes
-ps -eo pid,user,comm,%cpu --sort=-%cpu | head -n 6
+ps -eo pid,user,comm,%cpu --sort=-%cpu | head -n 6 || true
 
 echo -e "\n==== Top 5 Processes by Memory Usage ===="
-ps -eo pid,user,comm,%mem --sort=-%mem | head -n 6
+ps -eo pid,user,comm,%mem --sort=-%mem | head -n 6 || true

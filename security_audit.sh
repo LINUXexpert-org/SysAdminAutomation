@@ -17,18 +17,29 @@
 # 
 # Usage: security_audit.sh   (no arguments)
 # Description: Lists world-writable files/dirs, SUID/SGID files, and listening ports.
- 
+#
+# Run as root for a complete picture: as an unprivileged user, find
+# cannot descend into directories it may not read, so a clean report
+# below is not the same as a clean system.
+
+set -euo pipefail
+
+# Each find below ends in `|| true`. find exits non-zero when it could
+# not read some directory -- routine here, since we deliberately walk the
+# whole filesystem -- and without this, set -e would abort the audit part
+# way through and still look like it had finished.
+
 # World-writable files (perm bits: others have write)
 echo "==== World-Writable Files (potentially unsafe) ===="
-find / -xdev -type f -perm -0002 -printf '%M %u %g %p\n' 2>/dev/null
+find / -xdev -type f -perm -0002 -printf '%M %u %g %p\n' 2>/dev/null || true
 
 # World-writable directories without sticky bit
 echo -e "\n==== World-Writable Directories (no sticky bit) ===="
-find / -xdev -type d -perm -0002 ! -perm -1000 -printf '%M %u %g %p\n' 2>/dev/null
+find / -xdev -type d -perm -0002 ! -perm -1000 -printf '%M %u %g %p\n' 2>/dev/null || true
 
 # SUID/SGID files (files with setuid or setgid bits)
 echo -e "\n==== SUID/SGID Files ===="
-find / -xdev \( -perm -4000 -o -perm -2000 \) -printf '%M %u %g %p\n' 2>/dev/null
+find / -xdev \( -perm -4000 -o -perm -2000 \) -printf '%M %u %g %p\n' 2>/dev/null || true
 
 # Open listening ports
 echo -e "\n==== Listening Network Ports ===="
