@@ -28,6 +28,6 @@ jobs:
           # failing on day one would block every PR on pre-existing
           # issues. Tighten to "error" -> "warning" -> remove once the
           # backlog is cleared; see the audit in the README.
-          severity: error
+          severity: warning
           check_together: 'yes'
           format: gcc
