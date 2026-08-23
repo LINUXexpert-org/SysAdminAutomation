@@ -35,11 +35,19 @@ fi
 
 # List available backups for that user
 echo "📁 Available backups for $EMAIL:"
-ls "$BACKUP_DIR" | grep "$EMAIL" | grep '\.tgz$'
+# -F: match the address literally. Unquoted it was a regex, so "." in
+# any address matched any character.
+find "$BACKUP_DIR" -maxdepth 1 -type f -name '*.tgz' -printf '%f\n' | grep -F "$EMAIL" || true
 echo
 
 # Prompt for filename
 read -p "Enter the exact filename of the backup to restore (e.g., user@example.com_2024-06-11_10-20-30.tgz): " FILENAME
+# A bare filename only. Without this, "../../etc/shadow" would resolve
+# outside $BACKUP_DIR and be handed to the restore command.
+if [[ "$FILENAME" != "${FILENAME##*/}" || -z "$FILENAME" ]]; then
+    echo "❌ Enter a filename only, not a path: $FILENAME"
+    exit 1
+fi
 FULL_PATH="${BACKUP_DIR}/${FILENAME}"
 
 # Validate file exists
@@ -58,7 +66,11 @@ fi
 
 # Run the restore command as zimbra user
 echo "🔄 Restoring backup..."
-sudo -u zimbra bash -c "/opt/zimbra/bin/zmmailbox -z -m '$EMAIL' postRestURL '/?fmt=tgz&resolve=skip' --file '$FULL_PATH'"
+# Single-quoted body: nothing is interpolated. $EMAIL and $FULL_PATH
+# arrive as positional arguments. Interpolating them (as this line
+# previously did) let shell metacharacters in either value run commands
+# as the zimbra user.
+sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" postRestURL "/?fmt=tgz&resolve=skip" --file "$2"' _ "$EMAIL" "$FULL_PATH"
 
 # Check result
 if [ $? -eq 0 ]; then

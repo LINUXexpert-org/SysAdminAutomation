@@ -24,6 +24,14 @@ fi
 read -p "Enter Zimbra username (email address): " EMAIL
 read -p "Enter backup directory (absolute path) [/opt/zimbra/backups]: " BACKUP_DIR
 
+# Reject anything that is not a plain address. $EMAIL is used both as a
+# command argument and as part of the backup filename, so a "/" here
+# would write outside $BACKUP_DIR entirely.
+if ! [[ "$EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+    echo "❌ Not a valid email address: $EMAIL"
+    exit 1
+fi
+
 # Use default if none provided
 BACKUP_DIR=${BACKUP_DIR:-/opt/zimbra/backups}
 
@@ -45,7 +53,11 @@ fi
 
 # Run zmmailbox command as zimbra user
 echo "📦 Starting backup..."
-sudo -u zimbra bash -c "/opt/zimbra/bin/zmmailbox -z -m '$EMAIL' getRestURL '//?fmt=tgz'" > "$BACKUP_FILE"
+# The script body is single-quoted so nothing is interpolated into it;
+# $EMAIL arrives as a positional argument instead. Interpolating it (as
+# this line previously did) let any shell metacharacter in the address
+# run commands as the zimbra user, which owns the whole mail store.
+sudo -u zimbra bash -c '/opt/zimbra/bin/zmmailbox -z -m "$1" getRestURL "//?fmt=tgz"' _ "$EMAIL" > "$BACKUP_FILE"
 
 # Verify success
 if [ $? -eq 0 ]; then
