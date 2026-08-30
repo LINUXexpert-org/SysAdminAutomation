@@ -1,7 +1,7 @@
 #!/bin/bash
 # log_rotate.sh - Compress and remove old log files
 # 
-# Copyright (C) 2025 LINUXexpert.org
+# Copyright (C) 2025 Coffey Labs
 # 
 # This program is free software: you can redistribute it and/or modify it 
 # under the terms of the GNU General Public License as published by the 
