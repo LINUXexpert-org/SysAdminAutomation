@@ -1,0 +1,26 @@
+# CI on the self-hosted GitLab, ported from .github/workflows/shellcheck.yml
+# when the GitHub account was suspended on 2026-09-20. The Actions file stays
+# in the tree as the reference.
+#
+# ludeeus/action-shellcheck has no GitLab equivalent, so this runs shellcheck
+# directly from its own digest-pinned image and reproduces the settings the
+# action was given: severity=warning, gcc format, every script in one run.
+
+stages: [lint]
+
+shellcheck:
+  stage: lint
+  image:
+    name: koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d # stable
+    # The image's entrypoint is shellcheck itself, which would swallow the
+    # runner's shell; GitLab needs a shell to drive the job.
+    entrypoint: [""]
+  script:
+    - |
+      files=$(find . -name '*.sh' -not -path './.git/*' | sort)
+      [ -n "$files" ] || { echo "no shell scripts found"; exit 1; }
+      echo "$files" | tr '\n' ' '
+      shellcheck --severity=warning --format=gcc $files
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
