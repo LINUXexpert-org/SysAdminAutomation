@@ -10,11 +10,12 @@ stages: [lint]
 
 shellcheck:
   stage: lint
-  image:
-    name: koalaman/shellcheck:stable@sha256:bb596a0d169b85ddd81d8b6d3a2ff6d5baf5fca10b97f575ebc647c3dff62b3d # stable
-    # The image's entrypoint is shellcheck itself, which would swallow the
-    # runner's shell; GitLab needs a shell to drive the job.
-    entrypoint: [""]
+  # The -alpine variant, not koalaman/shellcheck:stable. That one is built
+  # FROM scratch with shellcheck as the entrypoint and no shell at all, so the
+  # runner cannot start a job script in it and the job dies before it runs
+  # ("OCI runtime create failed"). Clearing the entrypoint does not help: there
+  # is still no /bin/sh to clear it to.
+  image: koalaman/shellcheck-alpine:stable@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 # stable
   script:
     - |
       files=$(find . -name '*.sh' -not -path './.git/*' | sort)
