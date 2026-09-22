@@ -1,0 +1,36 @@
+# CI on the self-hosted Gitea, ported from .gitlab-ci.yml during the move off
+# GitLab (2026-09-22). Gitea reads .gitea/workflows and ignores .github/ once
+# this directory exists; .github/workflows stays as it was for GitHub.
+#
+# Every job runs in an image pinned by digest (tag in the trailing comment),
+# and the only action used is coffey-labs/actions/checkout pinned by SHA. The
+# instance resolves short `uses:` against itself, never GitHub, so nothing
+# unreviewed can be pulled in.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    runs-on: docker
+    # The -alpine variant, not koalaman/shellcheck:stable. That one is built
+    # FROM scratch with shellcheck as the entrypoint and no shell at all, so a
+    # job cannot run a script in it.
+    container:
+      image: koalaman/shellcheck-alpine:stable@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 # stable
+    steps:
+      - uses: coffey-labs/actions/checkout@fab0c4d45e0162963965f1555df27b7bed5e20ec
+      # Reproduces the settings ludeeus/action-shellcheck was given on GitHub:
+      # severity=warning, gcc format, every script in one run.
+      - run: |
+          files=$(find . -name '*.sh' -not -path './.git/*' | sort)
+          [ -n "$files" ] || { echo "no shell scripts found"; exit 1; }
+          echo "$files" | tr '\n' ' '
+          shellcheck --severity=warning --format=gcc $files
