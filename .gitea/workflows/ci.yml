@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   shellcheck:
-    runs-on: docker
+    runs-on: light
     # The -alpine variant, not koalaman/shellcheck:stable. That one is built
     # FROM scratch with shellcheck as the entrypoint and no shell at all, so a
     # job cannot run a script in it.
