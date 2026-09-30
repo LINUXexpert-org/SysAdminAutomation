@@ -1,0 +1,88 @@
+# ShellCheck on GitHub Actions, for the GitHub replica of this repository.
+# Gitea (git.coffeylabs.org) is the source of truth: it pushes every commit
+# here through a push mirror, and this workflow lints what arrives. Pull
+# requests live on Gitea, so there is no pull_request trigger -- a PR's branch
+# reaches this copy as an ordinary push.
+#
+# Every file in this repository is a shell script that people are invited to
+# run as root, so a lint gate is the cheapest guard against the class of bug
+# that keeps showing up here: unquoted expansions, values interpolated into
+# commands, and exit statuses that go unchecked.
+#
+# The switch is the org variable BUILD_ON, set on both forges. With
+# BUILD_ON=github every job here runs, the job in .gitea/workflows/ci.yml
+# skips, and Gitea's own run waits for the result this workflow reports back.
+# With it unset, every job here skips and Gitea lints as before -- which is
+# also the way back if GitHub is ever unavailable: unset it on Gitea.
+#
+# The job is .gitea/workflows/ci.yml's, in the same image pinned by digest,
+# with the same settings (severity=warning, gcc format, every script in one
+# run). The only action used is actions/checkout, pinned to a full commit SHA
+# with the release in a trailing comment.
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITEA_URL: ${{ vars.GITEA_URL }}
+
+jobs:
+  # Tells Gitea a result is on its way, so the commit does not look unchecked
+  # while the checks run.
+  pending:
+    if: ${{ vars.BUILD_ON == 'github' }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          CONTEXT: github/ci (${{ github.ref_type }})
+        run: |
+          jq -n --arg c "$CONTEXT" --arg u "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{state:"pending", context:$c, target_url:$u, description:"GitHub Actions"}' |
+          curl -fsS -o /dev/null -X POST -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+            --data @- "$GITEA_URL/api/v1/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"
+
+  shellcheck:
+    if: ${{ vars.BUILD_ON == 'github' }}
+    runs-on: ubuntu-latest
+    # The -alpine variant, not koalaman/shellcheck:stable. That one is built
+    # FROM scratch with shellcheck as the entrypoint and no shell at all, so a
+    # job cannot run a script in it.
+    container:
+      image: koalaman/shellcheck-alpine:stable@sha256:c82fe42504fbc9fc68f15d36638e5ee2324ebb8b94e96a3c4e395bf361c49183 # stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Reproduces the settings ludeeus/action-shellcheck was given on GitHub:
+      # severity=warning, gcc format, every script in one run.
+      - run: |
+          files=$(find . -name '*.sh' -not -path './.git/*' | sort)
+          [ -n "$files" ] || { echo "no shell scripts found"; exit 1; }
+          echo "$files" | tr '\n' ' '
+          shellcheck --severity=warning --format=gcc $files
+
+  # One commit status on Gitea for the whole run. Gitea's ci.yml `github` job
+  # waits on exactly this context.
+  report:
+    if: ${{ always() && vars.BUILD_ON == 'github' }}
+    needs: [pending, shellcheck]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          CONTEXT: github/ci (${{ github.ref_type }})
+          STATE: ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && 'failure' || 'success' }}
+        run: |
+          jq -n --arg s "$STATE" --arg c "$CONTEXT" --arg u "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{state:$s, context:$c, target_url:$u, description:"GitHub Actions"}' |
+          curl -fsS -o /dev/null -X POST -H "Authorization: token $GITEA_TOKEN" -H 'Content-Type: application/json' \
+            --data @- "$GITEA_URL/api/v1/repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"

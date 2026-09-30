@@ -1,6 +1,14 @@
 # CI on the self-hosted Gitea, ported from .gitlab-ci.yml during the move off
 # GitLab (2026-09-22). Gitea reads .gitea/workflows and ignores .github/ once
-# this directory exists; .github/workflows stays as it was for GitHub.
+# this directory exists.
+#
+# BUILD_ON: an org variable, set on both forges. Gitea push-mirrors this
+# repository to GitHub, and with BUILD_ON=github the shellcheck job here skips
+# and GitHub Actions runs the same lint on the mirrored copy
+# (.github/workflows/ci.yml). The `github` job at the end waits for the result
+# that workflow reports back, so this run still passes or fails with the lint.
+# Unset, everything runs here as before -- which is also the fallback if
+# GitHub is ever unavailable.
 #
 # Every job runs in an image pinned by digest (tag in the trailing comment),
 # and the only action used is coffey-labs/actions/checkout pinned by SHA. The
@@ -19,6 +27,7 @@ concurrency:
 
 jobs:
   shellcheck:
+    if: ${{ vars.BUILD_ON != 'github' }}
     runs-on: light
     # The -alpine variant, not koalaman/shellcheck:stable. That one is built
     # FROM scratch with shellcheck as the entrypoint and no shell at all, so a
@@ -34,3 +43,37 @@ jobs:
           [ -n "$files" ] || { echo "no shell scripts found"; exit 1; }
           echo "$files" | tr '\n' ' '
           shellcheck --severity=warning --format=gcc $files
+
+  # ------------------------------------------------------------ github ------
+  # With BUILD_ON=github the jobs above skip and GitHub Actions builds this
+  # commit on the push-mirrored copy (.github/workflows/ci.yml). This job waits
+  # for the commit status that workflow reports back, and passes or fails with
+  # it, so this run -- what pull requests and merges look at -- still carries
+  # the real result. If GitHub never reports, it times out and fails: the cue
+  # to unset BUILD_ON and build here again.
+  github:
+    if: ${{ vars.BUILD_ON == 'github' }}
+    runs-on: light
+    timeout-minutes: 150
+    container:
+      image: node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 # 26-bookworm-slim
+    env:
+      READ_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      CONTEXT: ${{ github.ref_type == 'tag' && 'github/ci (tag)' || 'github/ci (branch)' }}
+    steps:
+      - run: apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates curl jq >/dev/null
+      - shell: bash
+        run: |
+          set -uo pipefail
+          url="${CI_SERVER_INTERNAL}/api/v1/repos/${GITHUB_REPOSITORY}/commits/${SHA}/statuses?limit=50"
+          echo "Waiting for '${CONTEXT}' on ${SHA}"
+          while :; do
+            # The newest status for the context is the one that counts.
+            s="$(curl -fsS -H "Authorization: token ${READ_TOKEN}" "$url" | jq -r --arg c "$CONTEXT" '[.[] | select(.context == $c)] | sort_by(.id) | last | "\(.status) \(.target_url)"' 2>/dev/null)"
+            case "$s" in
+              success\ *) echo "GitHub: ${s}"; exit 0 ;;
+              failure\ *|error\ *) echo "GitHub: ${s}" >&2; exit 1 ;;
+            esac
+            sleep 20
+          done
