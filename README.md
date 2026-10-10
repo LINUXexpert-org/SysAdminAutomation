@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > Development happens on [git.coffeylabs.org/coffey-labs/SysAdminAutomation](https://git.coffeylabs.org/coffey-labs/SysAdminAutomation); the copy on GitHub is a read-only mirror.
-> Report issues at **[git.coffeylabs.org/coffey-labs/SysAdminAutomation/issues](https://git.coffeylabs.org/coffey-labs/SysAdminAutomation/issues)**, and join discussions at **[community.coffeylabs.org](https://community.coffeylabs.org)**.
+> Report issues at **[git.coffeylabs.org/coffey-labs/SysAdminAutomation/issues](https://git.coffeylabs.org/coffey-labs/SysAdminAutomation/issues)**, join discussions at **[community.coffeylabs.org](https://community.coffeylabs.org)**, or chat on **[Discord](https://discord.gg/nqcY4TKfAn)**.
 
 A collection of Bash scripts for routine Linux system administration:
 backups, log handling, monitoring, user and service management, and package
